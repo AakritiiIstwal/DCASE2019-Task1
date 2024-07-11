@@ -1,0 +1,8 @@
+#Ignore .csv
+*.csv
+*.npy
+
+#Ignore data folder
+asc_checkpoints/
+logs/
+.ipynb_checkpoints/

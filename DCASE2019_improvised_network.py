@@ -120,7 +120,7 @@ def model_resnet_new(
     x = resnet_layer(
         combined, num_filters=initial_filters * 2, kernel_size=1, wd=wd, use_relu=True
     )
-    x = resnet_layer(x, num_filters=num_classes, kernel_size=1, wd=wd, use_relu=False)
+    x = resnet_layer(x, num_filters=num_classes, kernel_size=1, wd=wd, use_relu=False) # Reducing the number of classes to 10
     x = BatchNormalization(center=False, scale=False)(x)
     x = GlobalAveragePooling2D()(x)
     x = Activation("softmax")(x)

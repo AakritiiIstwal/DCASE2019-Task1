@@ -16,6 +16,7 @@ import tensorflow
 from keras.optimizers import SGD
 from DCASE2019_improvised_network import model_resnet_new
 from DCASE_training_functions import LR_WarmRestart, MixupGenerator
+from tqdm import tqdm
 
 print("Librosa version = ", librosa.__version__)
 print("Pysoundfile version = ", sound.__version__)
@@ -43,7 +44,9 @@ NumTimeBins = int(np.ceil(SampleDuration * sr / HopLength))
 max_lr = 0.1
 # batch_size = 32
 batch_size = 16
-num_epochs = 510
+num_epochs = 250
+# num_epochs = 120
+# num_epochs = 510
 mixup_alpha = 0.4
 crop_length = 400
 
@@ -72,7 +75,7 @@ def deltas(X_in):
 LM_train = np.zeros(
     (len(wavpaths_train), NumFreqBins, NumTimeBins, num_audio_channels), "float32"
 )
-for i in range(len(wavpaths_train)):
+for i in tqdm(range(len(wavpaths_train))):
     stereo, fs = sound.read(ThisPath + wavpaths_train[i], stop=SampleDuration * sr)
     for channel in range(num_audio_channels):
         if len(stereo.shape) == 1:
@@ -90,19 +93,19 @@ for i in range(len(wavpaths_train)):
         )
 
 LM_train = np.log(LM_train + 1e-8)
-LM_deltas_train = deltas(LM_train)
-LM_deltas_deltas_train = deltas(LM_deltas_train)
-LM_train = np.concatenate(
-    (LM_train[:, :, 4:-4, :], LM_deltas_train[:, :, 2:-2, :], LM_deltas_deltas_train),
-    axis=-1,
-)
+# LM_deltas_train = deltas(LM_train)
+# LM_deltas_deltas_train = deltas(LM_deltas_train)
+# LM_train = np.concatenate(
+#     (LM_train[:, :, 4:-4, :], LM_deltas_train[:, :, 2:-2, :], LM_deltas_deltas_train),
+#     axis=-1,
+# )
 
 print("Training data shape: ", LM_train.shape)
 
 LM_val = np.zeros(
     (len(wavpaths_val), NumFreqBins, NumTimeBins, num_audio_channels), "float32"
 )
-for i in range(len(wavpaths_val)):
+for i in tqdm(range(len(wavpaths_val))):
     stereo, fs = sound.read(ThisPath + wavpaths_val[i], stop=SampleDuration * sr)
     for channel in range(num_audio_channels):
         if len(stereo.shape) == 1:
@@ -120,15 +123,15 @@ for i in range(len(wavpaths_val)):
         )
 
 LM_val = np.log(LM_val + 1e-8)
-LM_deltas_val = deltas(LM_val)
-LM_deltas_deltas_val = deltas(LM_deltas_val)
-LM_val = np.concatenate(
-    (LM_val[:, :, 4:-4, :], LM_deltas_val[:, :, 2:-2, :], LM_deltas_deltas_val), axis=-1
-)
+# LM_deltas_val = deltas(LM_val)
+# LM_deltas_deltas_val = deltas(LM_deltas_val)
+# LM_val = np.concatenate(
+#     (LM_val[:, :, 4:-4, :], LM_deltas_val[:, :, 2:-2, :], LM_deltas_deltas_val), axis=-1
+# )
 print("Validation data shape: ", LM_val.shape)
 
 model = model_resnet_new(
-    NumClasses, input_shape=[NumFreqBins, None, 3 * num_audio_channels]
+    NumClasses, input_shape=[NumFreqBins, None, num_audio_channels]
 )
 model.compile(
     loss="categorical_crossentropy",
@@ -152,10 +155,17 @@ TrainDataGen = MixupGenerator(
     LM_train, y_train, batch_size=batch_size, alpha=mixup_alpha, crop_length=crop_length
 )()
 
+# Define the ModelCheckpoint callback,  by default the monitoring of model is based on validation loss, so best model is saved based on validation loss
+checkpoint_callback = keras.callbacks.ModelCheckpoint(
+    filepath='asc_checkpoints/model_{epoch:02d}-{val_loss:.2f}.keras',
+    save_best_only=True,
+    verbose=1
+)
+
 logdir = "logs/scalars/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 tensorboard_callback = keras.callbacks.TensorBoard(log_dir=logdir)
 
-callbacks = [lr_scheduler, tensorboard_callback]
+callbacks = [lr_scheduler, tensorboard_callback, checkpoint_callback]
 # train the model
 training_history = model.fit(
     x=TrainDataGen,
@@ -165,5 +175,6 @@ training_history = model.fit(
     callbacks=callbacks,
     steps_per_epoch=int(np.ceil(LM_train.shape[0] / batch_size)),
 )
-model.save("DCASE_" + WhichTask + "_Task_development_1.h5")
+# model.save("DCASE_" + WhichTask + "_Task_development_1.h5")
+model.save("DCASE_" + WhichTask + "_Epochs_"+ num_epochs+ "_Task_development_1.keras")
 print("Average test loss: ", np.average(training_history.history["loss"]))
